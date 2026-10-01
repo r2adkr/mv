@@ -1,16 +1,19 @@
-import type { IncomingMessage, ServerResponse } from 'http';
 import { fetchMovieInfo } from '../../src/server/kobisService';
 
-interface VercelRequest extends IncomingMessage {
-  query: Record<string, string | string[] | undefined>;
+function sendJson(res: any, statusCode: number, data: unknown) {
+  try {
+    if (typeof res.status === 'function' && typeof res.json === 'function') {
+      return res.status(statusCode).json(data);
+    }
+  } catch (_e) {
+    // fallback
+  }
+  res.statusCode = statusCode;
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.end(JSON.stringify(data));
 }
 
-interface VercelResponse extends ServerResponse {
-  status: (statusCode: number) => VercelResponse;
-  json: (body: unknown) => VercelResponse;
-}
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
@@ -20,12 +23,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   );
 
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
+    res.statusCode = 200;
+    res.end();
     return;
   }
 
   try {
-    let movieCd = typeof req.query.movieCd === 'string' ? req.query.movieCd : undefined;
+    const url = new URL(req.url || '', 'http://localhost');
+    let movieCd =
+      typeof req.query?.movieCd === 'string'
+        ? req.query.movieCd
+        : url.searchParams.get('movieCd') || undefined;
 
     if (!movieCd && req.url) {
       const parts = req.url.split('?')[0].split('/');
@@ -36,14 +44,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!movieCd) {
-      return res.status(400).json({ error: '영화 코드가 필요합니다.' });
+      return sendJson(res, 400, { error: '영화 코드가 필요합니다.' });
     }
 
     const data = await fetchMovieInfo(movieCd);
-    return res.status(200).json(data);
+    return sendJson(res, 200, data);
   } catch (error: unknown) {
     console.error('Vercel Movie dynamic route handler error:', error);
     const msg = error instanceof Error ? error.message : '영화 상세 정보를 불러오는 중 오류가 발생했습니다.';
-    return res.status(500).json({ error: msg });
+    return sendJson(res, 500, { error: msg });
   }
 }

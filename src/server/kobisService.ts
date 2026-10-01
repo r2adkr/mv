@@ -29,6 +29,23 @@ export function setCache(key: string, data: unknown, ttlSeconds: number): void {
   cache.set(key, { data, expiry: Date.now() + ttlSeconds * 1000 });
 }
 
+async function fetchWithTimeout(url: string, timeoutMs = 8000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+    });
+    return res;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 export async function fetchDailyBoxOffice(date: string, multiMovieYn?: string, repNationCd?: string) {
   if (!date || !/^\d{8}$/.test(date)) {
     throw new Error('유효한 날짜 형식(YYYYMMDD)을 입력해주세요.');
@@ -53,14 +70,19 @@ export async function fetchDailyBoxOffice(date: string, multiMovieYn?: string, r
   }
 
   const kobisUrl = `http://kobis.or.kr/kobisopenapi/webservice/rest/boxoffice/searchDailyBoxOfficeList.json?${params.toString()}`;
-  const response = await fetch(kobisUrl, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    },
-  });
+  
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(kobisUrl, 8000);
+  } catch (err: unknown) {
+    // If HTTP failed, retry with HTTPS
+    console.warn('HTTP fetch failed, trying HTTPS:', err);
+    const httpsUrl = `https://kobis.or.kr/kobisopenapi/webservice/rest/boxoffice/searchDailyBoxOfficeList.json?${params.toString()}`;
+    response = await fetchWithTimeout(httpsUrl, 8000);
+  }
 
   if (!response.ok) {
-    throw new Error(`KOBIS API 응답 실패: ${response.statusText}`);
+    throw new Error(`KOBIS API 응답 실패: ${response.statusText || response.status}`);
   }
 
   const data = await response.json();
@@ -82,14 +104,19 @@ export async function fetchMovieInfo(movieCd: string) {
 
   const apiKey = getKobisApiKey();
   const kobisUrl = `http://www.kobis.or.kr/kobisopenapi/webservice/rest/movie/searchMovieInfo.json?key=${apiKey}&movieCd=${encodeURIComponent(movieCd)}`;
-  const response = await fetch(kobisUrl, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    },
-  });
+  
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(kobisUrl, 8000);
+  } catch (err: unknown) {
+    // If HTTP failed, retry with HTTPS
+    console.warn('HTTP fetch failed, trying HTTPS:', err);
+    const httpsUrl = `https://www.kobis.or.kr/kobisopenapi/webservice/rest/movie/searchMovieInfo.json?key=${apiKey}&movieCd=${encodeURIComponent(movieCd)}`;
+    response = await fetchWithTimeout(httpsUrl, 8000);
+  }
 
   if (!response.ok) {
-    throw new Error(`KOBIS API 응답 실패: ${response.statusText}`);
+    throw new Error(`KOBIS API 응답 실패: ${response.statusText || response.status}`);
   }
 
   const data = await response.json();
