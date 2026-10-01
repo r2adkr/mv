@@ -1,18 +1,4 @@
-import type { IncomingMessage } from 'http';
-import { fetchDailyBoxOffice } from '../src/server/kobisService';
-
-function sendJson(res: any, statusCode: number, data: unknown) {
-  try {
-    if (typeof res.status === 'function' && typeof res.json === 'function') {
-      return res.status(statusCode).json(data);
-    }
-  } catch (_e) {
-    // fallback
-  }
-  res.statusCode = statusCode;
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.end(JSON.stringify(data));
-}
+import { fetchDailyBoxOffice, sendJson } from './_kobis';
 
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
